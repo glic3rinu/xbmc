@@ -243,10 +243,14 @@ bool CGUIInfoLabel::ReplaceSpecialKeywordReferences(std::string& work,
 
 std::string LocalizeReplacer(const std::string& str)
 {
-  std::string replace = g_localizeStringsTemp.Get(atoi(str.c_str()));
-  if (replace.empty())
-    replace = g_localizeStrings.Get(atoi(str.c_str()));
-  return replace;
+  const uint32_t id = std::atoi(str.c_str());
+  auto skin = CServiceBroker::GetGUI()->GetSkinInfo();
+  if (skin && ADDON::IsSkinStringId(id))
+  {
+    return g_localizeStrings.GetAddonString(skin->ID(), id);
+  }
+
+  return g_localizeStrings.Get(id);
 }
 
 std::string AddonReplacer(const std::string& str)
@@ -368,8 +372,12 @@ void CGUIInfoLabel::Parse(const std::string& label,
           {
             info = infoMgr.TranslateSkinVariableString(params[0], context);
             if (info == 0)
-              info = infoMgr.RegisterSkinVariableString(
-                  g_SkinInfo->CreateSkinVariable(params[0], context));
+            {
+              auto skin = CServiceBroker::GetGUI()->GetSkinInfo();
+              if (skin)
+                info = infoMgr.RegisterSkinVariableString(
+                    skin->CreateSkinVariable(params[0], context));
+            }
             if (info == 0) // skinner didn't define this conditional label!
               CLog::Log(LOGWARNING, "Label Formatting: $VAR[{}] is not defined", params[0]);
           }

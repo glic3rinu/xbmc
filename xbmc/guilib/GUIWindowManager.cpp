@@ -706,8 +706,9 @@ void CGUIWindowManager::Remove(int id)
   }
 }
 
-// removes and deletes the window.  Should only be called
-// from the class that created the window using new.
+// Removes and deletes the window. Should only be called
+// from the class that created the window and transferred
+// ownership to CGUIWindowManager via Add.
 void CGUIWindowManager::Delete(int id)
 {
   std::unique_lock lock(CServiceBroker::GetWinSystem()->GetGfxContext());
@@ -834,7 +835,9 @@ void CGUIWindowManager::ActivateWindow_Internal(int iWindowID, const std::vector
   // translate virtual windows
   if (iWindowID == WINDOW_START)
   { // virtual start window
-    iWindowID = g_SkinInfo->GetStartWindow();
+    auto skin = CServiceBroker::GetGUI()->GetSkinInfo();
+    if (skin)
+      iWindowID = skin->GetStartWindow();
   }
 
   // debug

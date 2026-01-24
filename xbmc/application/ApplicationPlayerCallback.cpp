@@ -59,6 +59,7 @@ bool ShouldUpdateStreamDetails(const CFileItem& file)
 {
   // If a title/playlist hasn't been selected for a bluray/dvds then the stream details may not be known
   const bool isDiscOrStream{VIDEO::IsBDFile(file) || VIDEO::IsDVDFile(file) || file.IsDiscImage() ||
+                            URIUtils::IsBlurayMenuPath(file.GetDynPath()) ||
                             NETWORK::IsInternetStream(file)};
 
   // Stream details may be already set from a previous playback or nfo
@@ -312,6 +313,11 @@ void UpdateStackAndItem(const CFileItem& file,
   }
   else
   {
+    constexpr double FINISH_THRESHOLD{1.0}; // 1 second from end is considered finished
+    const bool currentPartFinished{bookmark.timeInSeconds + FINISH_THRESHOLD >
+                                   bookmark.totalTimeInSeconds};
+    stackHelper->SetCurrentPartFinished(currentPartFinished);
+
     ConvertRelativeStackTimesToAbsolute(bookmark, file, stackHelper);
   }
 }

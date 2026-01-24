@@ -33,7 +33,6 @@
 #include "VideoPlayerRadioRDS.h"
 #include "VideoPlayerVideo.h"
 #include "application/Application.h"
-#include "application/ApplicationStackHelper.h"
 #include "cores/DataCacheCore.h"
 #include "cores/EdlEdit.h"
 #include "cores/FFmpeg.h"
@@ -64,6 +63,7 @@
 #include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
 
+#include <cassert>
 #include <chrono>
 #include <iterator>
 #include <limits>
@@ -447,11 +447,8 @@ const SelectionStream& CSelectionStreams::Get(StreamType type, int index) const
 std::vector<SelectionStream> CSelectionStreams::Get(StreamType type)
 {
   std::vector<SelectionStream> streams;
-  std::copy_if(m_Streams.begin(), m_Streams.end(), std::back_inserter(streams),
-               [type](const SelectionStream &stream)
-               {
-                 return stream.type == type;
-               });
+  std::ranges::copy_if(m_Streams, std::back_inserter(streams),
+                       [type](const SelectionStream& stream) { return stream.type == type; });
   return streams;
 }
 
@@ -748,7 +745,6 @@ CVideoPlayer::CVideoPlayer(IPlayerCallback& callback)
   m_caching = CACHESTATE_DONE;
   m_HasVideo = false;
   m_HasAudio = false;
-  m_UpdateStreamDetails = false;
 
   const int tenthsSeconds = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
       CSettings::SETTING_VIDEOPLAYER_QUEUETIMESIZE);
@@ -981,6 +977,14 @@ bool CVideoPlayer::OpenDemuxStream()
     m_pInputStream->SetReadRate(static_cast<uint32_t>(len * 1000 / tim));
 
   m_offset_pts = 0;
+
+  if (m_updateStreamDetails)
+  {
+    CFileItem item;
+    UpdateFileItemStreamDetails(item, UpdateStreamDetails::ALWAYS_UPDATE);
+    if (item.HasVideoInfoTag())
+      m_pInputStream->SaveCurrentState(item.GetVideoInfoTag()->m_streamDetails);
+  }
 
   return true;
 }
@@ -2686,7 +2690,7 @@ void CVideoPlayer::OnExit()
   // For other input streams no action is taken (as NONE is returned by the default virtual function)
   constexpr double STREAM_FINISHED{std::numeric_limits<double>::max()};
   const CDVDInputStream::UpdateState updateState{
-      m_pInputStream->UpdateCurrentState(fileItem, m_State.time, m_bCloseRequest)};
+      m_pInputStream->UpdateItemFromSavedStates(fileItem, m_State.time, m_bCloseRequest)};
   switch (updateState)
   {
     using enum CDVDInputStream::UpdateState;
@@ -2697,7 +2701,6 @@ void CVideoPlayer::OnExit()
       m_State.Clear();
       break;
     case NONE:
-    default:
       break;
   }
 
@@ -3152,7 +3155,8 @@ void CVideoPlayer::HandleMessages()
     }
     else if (pMsg->IsType(CDVDMsg::PLAYER_SETSPEED))
     {
-      int speed = std::static_pointer_cast<CDVDMsgPlayerSetSpeed>(pMsg)->GetSpeed();
+      const auto msg = std::static_pointer_cast<CDVDMsgPlayerSetSpeed>(pMsg);
+      const int speed = msg->GetSpeed();
 
       // correct our current clock, as it would start going wrong otherwise
       if (m_State.timestamp > 0)
@@ -3181,10 +3185,18 @@ void CVideoPlayer::HandleMessages()
         pvrinputstream->Pause(speed == 0);
       }
 
-      // do a seek after rewind, clock is not in sync with current pts
-      if ((speed == DVD_PLAYSPEED_NORMAL) &&
-          (m_playSpeed != DVD_PLAYSPEED_NORMAL) &&
-          (m_playSpeed != DVD_PLAYSPEED_PAUSE))
+      const bool isTempoSpeed = msg->IsTempo();
+      assert(!(isTempoSpeed &&
+               !m_processInfo->IsTempoAllowed(static_cast<float>(speed) / DVD_PLAYSPEED_NORMAL)));
+
+      const bool wasFFRW =
+          (m_playSpeed != DVD_PLAYSPEED_NORMAL && m_playSpeed != DVD_PLAYSPEED_PAUSE &&
+           !m_processInfo->IsTempoAllowed(static_cast<float>(m_playSpeed) / DVD_PLAYSPEED_NORMAL));
+
+      // Seek when returning to normal 1.0x or tempo play from FF/RW
+      // back from RW: clock is not in sync with current pts
+      // back from FF: fill the empty audio queue to avoid no audio
+      if ((speed == DVD_PLAYSPEED_NORMAL || isTempoSpeed) && wasFFRW)
       {
         double iTime = m_VideoPlayerVideo->GetCurrentPts();
         if (iTime == DVD_NOPTS_VALUE)
@@ -3201,7 +3213,7 @@ void CVideoPlayer::HandleMessages()
         m_messenger.Put(std::make_shared<CDVDMsgPlayerSeek>(mode));
       }
 
-      if (std::static_pointer_cast<CDVDMsgPlayerSetSpeed>(pMsg)->IsTempo())
+      if (isTempoSpeed)
         m_processInfo->SetTempo(static_cast<float>(speed) / DVD_PLAYSPEED_NORMAL);
       else
         m_processInfo->SetSpeed(static_cast<float>(speed) / DVD_PLAYSPEED_NORMAL);
@@ -3291,7 +3303,7 @@ void CVideoPlayer::HandleMessages()
       m_bAbortRequest = true;
     }
     else if (pMsg->IsType(CDVDMsg::PLAYER_SET_UPDATE_STREAM_DETAILS))
-      m_UpdateStreamDetails = true;
+      m_updateStreamDetails = true;
   }
 }
 
@@ -4043,7 +4055,8 @@ bool CVideoPlayer::OpenVideoStream(CDVDStreamInfo& hint, bool reset)
   // open CC demuxer if video is mpeg2
   if ((hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_H264) && !m_pCCDemuxer)
   {
-    m_pCCDemuxer = std::make_unique<CDVDDemuxCC>(hint.codec);
+    m_pCCDemuxer = std::make_unique<CDVDDemuxCC>(hint.codec, hint.extradata.GetData(),
+                                                 static_cast<int>(hint.extradata.GetSize()));
     m_SelectionStreams.Clear(StreamType::NONE, STREAM_SOURCE_VIDEOMUX);
   }
 
@@ -4197,6 +4210,10 @@ void CVideoPlayer::FlushBuffers(double pts, bool accurate, bool sync)
     m_CurrentSubtitle.inited = false;
     m_CurrentTeletext.inited = false;
     m_CurrentRadioRDS.inited  = false;
+
+    // Reset offset_pts to prevent accumulation of timestamp corrections across seeks
+    // This fixes desync issues with external subtitles after multiple seeks (issue #26647)
+    m_offset_pts = 0.0;
   }
 
   m_CurrentAudio.dts         = DVD_NOPTS_VALUE;
@@ -5230,12 +5247,6 @@ void CVideoPlayer::UpdatePlayState(double timeout)
 
   m_processInfo->SetPlayTimes(state.startTime, state.time, state.timeMin, state.timeMax);
 
-  // Save state of the current stream (for blurays/DVDs)
-  CFileItem item;
-  UpdateFileItemStreamDetails(item, UpdateStreamDetails::ALWAYS_UPDATE);
-  if (item.HasVideoInfoTag())
-    m_pInputStream->SaveCurrentState(item.GetVideoInfoTag()->m_streamDetails);
-
   std::unique_lock lock(m_StateSection);
   m_State = state;
 }
@@ -5438,13 +5449,13 @@ void CVideoPlayer::UpdateFileItemStreamDetails(CFileItem& item, UpdateStreamDeta
 {
   if (update == UpdateStreamDetails::UPDATE_IF_FLAGGED)
   {
-    if (!m_UpdateStreamDetails)
+    if (!m_updateStreamDetails)
       return;
 
     // For blurays
     item.SetProperty("update_stream_details", true);
 
-    m_UpdateStreamDetails = false;
+    m_updateStreamDetails = false;
   }
 
   CLog::Log(LOGDEBUG, "CVideoPlayer: updating file item stream details with available streams");

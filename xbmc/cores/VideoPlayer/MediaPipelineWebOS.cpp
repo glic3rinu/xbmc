@@ -19,6 +19,7 @@
 #include "Interface/TimingConstants.h"
 #include "Process/ProcessInfo.h"
 #include "VideoRenderers/RenderManager.h"
+#include "application/ApplicationVolumeHandling.h"
 #include "cores/AudioEngine/Encoders/AEEncoderFFmpeg.h"
 #include "cores/AudioEngine/Engines/ActiveAE/ActiveAEBuffer.h"
 #include "cores/AudioEngine/Interfaces/AE.h"
@@ -31,6 +32,7 @@
 #include "settings/lib/Setting.h"
 #include "utils/Base64.h"
 #include "utils/BitstreamConverter.h"
+#include "utils/ComponentContainer.h"
 #include "utils/JSONVariantParser.h"
 #include "utils/JSONVariantWriter.h"
 #include "utils/SystemInfo.h"
@@ -400,6 +402,7 @@ void CMediaPipelineWebOS::Flush(bool sync)
     CLog::LogF(LOGDEBUG, "Failed to flush media APIs");
   FlushAudioMessages();
   FlushVideoMessages();
+  std::scoped_lock lock(m_videoCriticalSection);
   if (m_bitstream)
     m_bitstream->ResetStartDecode();
   m_flushed = true;
@@ -1281,17 +1284,23 @@ unsigned int CMediaPipelineWebOS::GetQueueLevel(const StreamType type) const
   return std::min(99L, std::lround(100.0 * bytes / capacity));
 }
 
+void CMediaPipelineWebOS::SetDynamicRangeCompression(const long drc)
+{
+  m_audioLimiter.SetAmplification(std::pow(10.0f, static_cast<float>(drc) / 2000.0f));
+}
+
 void CMediaPipelineWebOS::Process()
 {
   while (!m_bStop)
   {
-    std::scoped_lock videoLock(m_videoCriticalSection);
     std::shared_ptr<CDVDMsg> msg = nullptr;
     int priority = 0;
     m_messageQueueVideo.Get(msg, 10ms, priority);
 
     if (msg)
     {
+      std::scoped_lock videoLock(m_videoCriticalSection);
+
       if (msg->IsType(CDVDMsg::DEMUXER_PACKET))
       {
         FeedVideoData(msg);
@@ -1322,12 +1331,13 @@ void CMediaPipelineWebOS::ProcessAudio()
   m_audioStats.Start();
   while (!m_bStop)
   {
-    std::scoped_lock lock(m_audioCriticalSection);
     std::shared_ptr<CDVDMsg> msg = nullptr;
     int priority = 0;
     m_messageQueueAudio.Get(msg, 10ms, priority);
     if (msg)
     {
+      std::scoped_lock lock(m_audioCriticalSection);
+
       if (msg->IsType(CDVDMsg::DEMUXER_PACKET))
       {
         const DemuxPacket* packet =
@@ -1356,6 +1366,7 @@ void CMediaPipelineWebOS::ProcessAudio()
                   settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_PROCESSQUALITY));
               m_audioResample = std::make_unique<ActiveAE::CActiveAEBufferPoolResample>(
                   m_audioCodec->GetFormat(), dstFormat, quality);
+              m_audioLimiter.SetSamplerate(dstFormat.m_sampleRate);
               const double sublevel =
                   settings->GetNumber(CSettings::SETTING_AUDIOOUTPUT_MIXSUBLEVEL) / 100.0;
               m_audioResample->Create(
@@ -1391,6 +1402,13 @@ void CMediaPipelineWebOS::ProcessAudio()
             }
 
             ActiveAE::CSampleBuffer* buffer = m_encoderBuffers->GetFreeBuffer();
+
+            const double centerMixLevel = frame.hasDownmix ? frame.centerMixLevel : M_SQRT1_2;
+            const double curDB = 20.0 * std::log10(centerMixLevel);
+            frame.centerMixLevel =
+                std::pow(10.0, (curDB + m_processInfo.GetVideoSettings().m_CenterMixLevel) / 20.0);
+            frame.hasDownmix = true;
+            buffer->centerMixLevel = frame.centerMixLevel;
             buffer->timestamp = static_cast<int64_t>(frame.pts);
             buffer->pkt->nb_samples = static_cast<int>(frame.nb_frames);
 
@@ -1411,6 +1429,29 @@ void CMediaPipelineWebOS::ProcessAudio()
                                                  : AC3_MAX_SYNC_FRAME_SIZE;
                 auto p = std::make_shared<CDVDMsgDemuxerPacket>(
                     CDVDDemuxUtils::AllocateDemuxPacket(maxSize));
+
+                const bool passthrough =
+                    CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+                        CSettings::SETTING_AUDIOOUTPUT_PASSTHROUGH);
+                if (!passthrough && buf->pkt->config.fmt == AV_SAMPLE_FMT_FLTP)
+                {
+                  float volume = CServiceBroker::GetAppComponents()
+                                     .GetComponent<CApplicationVolumeHandling>()
+                                     ->GetVolumePercent() /
+                                 100.0f;
+                  volume *= m_audioLimiter.Run(reinterpret_cast<float**>(buf->pkt->data),
+                                               buf->pkt->config.channels, 0, buf->pkt->planes > 1);
+
+                  for (std::size_t j = 0; j < static_cast<std::size_t>(buf->pkt->planes); ++j)
+                  {
+                    const std::size_t numSamples = static_cast<std::size_t>(buf->pkt->nb_samples) *
+                                                   buf->pkt->config.channels /
+                                                   static_cast<std::size_t>(buf->pkt->planes);
+                    std::span samples{reinterpret_cast<float*>(buf->pkt->data[j]), numSamples};
+                    std::ranges::for_each(samples, [volume](float& s) { s *= volume; });
+                  }
+                }
+
                 p->m_packet->pts = static_cast<double>(buf->timestamp);
                 p->m_packet->iSize = maxSize;
                 p->m_packet->iStreamId = RESAMPLED_STREAM_ID;
