@@ -19,6 +19,12 @@
 #include "utils/log.h"
 
 #include <mutex>
+// #region agent log
+#include <fstream>
+#include <chrono>
+#define DEBUG_LOG_PATH "/Users/maymerichgubern/xbmc/.cursor/debug.log"
+#define DEBUG_LOG(loc, msg, data) do { std::ofstream f(DEBUG_LOG_PATH, std::ios::app); f << "{\"location\":\"" << loc << "\",\"message\":\"" << msg << "\",\"data\":" << data << ",\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << "}\n"; f.close(); } while(0)
+// #endregion
 
 using namespace std::chrono_literals;
 
@@ -68,6 +74,9 @@ CGUIDialogCache::~CGUIDialogCache()
 
 void CGUIDialogCache::OpenDialog()
 {
+  // #region agent log
+  DEBUG_LOG("GUIDialogCache.cpp:OpenDialog:entry", "OpenDialog called from background thread", "{\"hypothesisId\":\"E\",\"isMainThread\":" << (CServiceBroker::GetAppMessenger()->IsProcessThread() ? "true" : "false") << ",\"dialogRunning\":" << (m_pDlg && m_pDlg->IsDialogRunning() ? "true" : "false") << "}");
+  // #endregion
   if (m_pDlg)
   {
     if (m_strHeader.empty())
@@ -78,6 +87,9 @@ void CGUIDialogCache::OpenDialog()
     m_pDlg->SetLine(2, CVariant{m_strLinePrev});
     m_pDlg->Open();
   }
+  // #region agent log
+  DEBUG_LOG("GUIDialogCache.cpp:OpenDialog:exit", "OpenDialog returning", "{\"hypothesisId\":\"E\",\"dialogRunning\":" << (m_pDlg && m_pDlg->IsDialogRunning() ? "true" : "false") << "}");
+  // #endregion
   bSentCancel = false;
 }
 
