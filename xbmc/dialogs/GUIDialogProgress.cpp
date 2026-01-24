@@ -8,10 +8,12 @@
 
 #include "GUIDialogProgress.h"
 
+#include "ServiceBroker.h"
 #include "guilib/GUIProgressControl.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/guiinfo/GUIInfoLabels.h"
+#include "messaging/ApplicationMessenger.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
 
