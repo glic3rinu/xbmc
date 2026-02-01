@@ -18,12 +18,6 @@
 #include "utils/log.h"
 
 #include <mutex>
-// #region agent log
-#include <fstream>
-#include <chrono>
-#define DEBUG_LOG_PATH "/Users/maymerichgubern/xbmc/.cursor/debug.log"
-#define DEBUG_LOG(loc, msg, data) do { std::ofstream f(DEBUG_LOG_PATH, std::ios::app); f << "{\"location\":\"" << loc << "\",\"message\":\"" << msg << "\",\"data\":" << data << ",\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << "}\n"; f.close(); } while(0)
-// #endregion
 
 using namespace std::chrono_literals;
 
@@ -73,11 +67,10 @@ int CGUIDialogProgress::GetChoice() const
 
 void CGUIDialogProgress::Open(const std::string &param /* = "" */)
 {
-  CLog::Log(LOGDEBUG, "DialogProgress::Open called {}", m_active ? "(already running)!" : "");
-
   // #region agent log
   bool isMainThread = CServiceBroker::GetAppMessenger()->IsProcessThread();
-  DEBUG_LOG("GUIDialogProgress.cpp:Open:entry", "Open called", "{\"hypothesisId\":\"A\",\"isMainThread\":" << (isMainThread ? "true" : "false") << ",\"m_active\":" << (m_active ? "true" : "false") << "}");
+  CLog::Log(LOGDEBUG, "[AGENT-DBG] DialogProgress::Open called {} isMainThread={} m_active={}",
+            m_active ? "(already running)!" : "", isMainThread, m_active);
   // #endregion
 
   {
@@ -90,12 +83,24 @@ void CGUIDialogProgress::Open(const std::string &param /* = "" */)
   // #region agent log
   int loopCount = 0;
   // #endregion
+
+  // Only wait for animation on main thread - background threads cannot drive
+  // the render loop, so spinning here would just waste CPU (busy-wait at 100%)
+  if (!isMainThread)
+  {
+    // #region agent log
+    CLog::Log(LOGDEBUG, "[AGENT-DBG] DialogProgress::Open skipping animation wait on non-main thread m_active={}", m_active);
+    // #endregion
+    return;
+  }
+
   while (m_active && IsAnimating(ANIM_TYPE_WINDOW_OPEN))
   {
     // #region agent log
     loopCount++;
     if (loopCount <= 5 || loopCount % 1000 == 0) {
-      DEBUG_LOG("GUIDialogProgress.cpp:Open:loop", "while loop iteration", "{\"hypothesisId\":\"A,B,C,D\",\"loopCount\":" << loopCount << ",\"m_active\":" << (m_active ? "true" : "false") << ",\"isAnimating\":" << (IsAnimating(ANIM_TYPE_WINDOW_OPEN) ? "true" : "false") << ",\"hasProcessed\":" << (HasProcessed() ? "true" : "false") << ",\"isMainThread\":" << (CServiceBroker::GetAppMessenger()->IsProcessThread() ? "true" : "false") << "}");
+      CLog::Log(LOGDEBUG, "[AGENT-DBG] DialogProgress::Open loop iteration {} m_active={} isAnimating={} hasProcessed={}",
+                loopCount, m_active, IsAnimating(ANIM_TYPE_WINDOW_OPEN), HasProcessed());
     }
     // #endregion
     Progress();
@@ -107,7 +112,8 @@ void CGUIDialogProgress::Open(const std::string &param /* = "" */)
       break;
   }
   // #region agent log
-  DEBUG_LOG("GUIDialogProgress.cpp:Open:exit", "Open exiting", "{\"hypothesisId\":\"A,B,C,D\",\"loopCount\":" << loopCount << ",\"m_active\":" << (m_active ? "true" : "false") << ",\"hasProcessed\":" << (HasProcessed() ? "true" : "false") << "}");
+  CLog::Log(LOGDEBUG, "[AGENT-DBG] DialogProgress::Open exiting loopCount={} m_active={} hasProcessed={}",
+            loopCount, m_active, HasProcessed());
   // #endregion
 }
 

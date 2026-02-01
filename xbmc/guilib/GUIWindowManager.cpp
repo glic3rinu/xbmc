@@ -157,12 +157,6 @@
 #include "games/dialogs/osd/DialogInGameSaves.h"
 #include "games/ports/windows/GUIPortWindow.h"
 #include "games/windows/GUIWindowGames.h"
-// #region agent log
-#include <fstream>
-#include <chrono>
-#define DEBUG_LOG_PATH "/Users/maymerichgubern/xbmc/.cursor/debug.log"
-#define DEBUG_LOG(loc, msg, data) do { std::ofstream f(DEBUG_LOG_PATH, std::ios::app); f << "{\"location\":\"" << loc << "\",\"message\":\"" << msg << "\",\"data\":" << data << ",\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << "}\n"; f.close(); } while(0)
-// #endregion
 
 using namespace KODI;
 using namespace PVR;
@@ -1522,7 +1516,8 @@ bool CGUIWindowManager::ProcessRenderLoop(bool renderOnly)
   callCount++;
   bool isMainThread = CServiceBroker::GetAppMessenger()->IsProcessThread();
   if (!isMainThread && (callCount <= 3 || callCount % 1000 == 0)) {
-    DEBUG_LOG("GUIWindowManager.cpp:ProcessRenderLoop", "ProcessRenderLoop from non-main thread (no-op)", "{\"hypothesisId\":\"A,D\",\"callCount\":" << callCount << ",\"isMainThread\":false,\"hasCallback\":" << (m_pCallback ? "true" : "false") << "}");
+    CLog::Log(LOGDEBUG, "[AGENT-DBG] ProcessRenderLoop from non-main thread (no-op) callCount={} hasCallback={}",
+              callCount, m_pCallback != nullptr);
   }
   // #endregion
 
