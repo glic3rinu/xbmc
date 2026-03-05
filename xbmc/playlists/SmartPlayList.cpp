@@ -14,7 +14,8 @@
 #include "dbwrappers/Database.h"
 #include "filesystem/File.h"
 #include "filesystem/SmartPlaylistDirectory.h"
-#include "guilib/LocalizeStrings.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/DatabaseUtils.h"
@@ -28,7 +29,6 @@
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
 
-#include <charconv>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -228,8 +228,9 @@ std::string CSmartPlaylistRule::TranslateGroup(Field group)
 std::string CSmartPlaylistRule::GetLocalizedField(int field)
 {
   for (const translateField& f : fields)
-    if (field == f.field) return g_localizeStrings.Get(f.localizedString);
-  return g_localizeStrings.Get(16018);
+    if (field == f.field)
+      return CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(f.localizedString);
+  return CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(16018);
 }
 
 CDatabaseQueryRule::FieldType CSmartPlaylistRule::GetFieldType(int field) const
@@ -297,23 +298,6 @@ bool CSmartPlaylistRule::ValidateMyRating(const std::string &input, void *data)
   return StringValidation::IsPositiveInteger(input, data) && rating <= 10;
 }
 
-namespace
-{
-template<typename T>
-std::optional<T> ToNumeric(std::string_view str)
-{
-  const char* end{str.data() + str.size()};
-  T result{};
-
-  auto [ptr, ec] = std::from_chars(str.data(), end, result);
-
-  if (ec != std::errc{} || ptr != end || result < 0)
-    return std::nullopt;
-
-  return result;
-}
-} // namespace
-
 bool CSmartPlaylistRule::ValidateDate(const std::string& input, void* data)
 {
   if (!data)
@@ -326,28 +310,8 @@ bool CSmartPlaylistRule::ValidateDate(const std::string& input, void* data)
     return true;
 
   // The date format must be YYYY-MM-DD
-  if (input.size() != 10)
-    return false;
-
-  const std::string_view sv{input};
-
-  if (sv[4] != '-' || sv[7] != '-')
-    return false;
-
-  const auto year{ToNumeric<int>(sv.substr(0, 4))};
-  if (!year.has_value())
-    return false;
-
-  const auto month{ToNumeric<int>(sv.substr(5, 2))};
-  if (!month.has_value())
-    return false;
-
-  const auto day{ToNumeric<int>(sv.substr(8, 2))};
-  if (!day.has_value())
-    return false;
-
   CDateTime dt;
-  return dt.SetDate(year.value(), month.value(), day.value());
+  return dt.SetFromRFC3339FullDate(input);
 }
 
 std::vector<Field> CSmartPlaylistRule::GetFields(const std::string &type)
@@ -586,144 +550,144 @@ std::vector<Field> CSmartPlaylistRule::GetFields(const std::string &type)
 std::vector<SortBy> CSmartPlaylistRule::GetOrders(const std::string &type)
 {
   std::vector<SortBy> orders;
-  orders.push_back(SortByNone);
+  orders.push_back(SortBy::NONE);
   if (type == "mixed")
   {
-    orders.push_back(SortByGenre);
-    orders.push_back(SortByAlbum);
-    orders.push_back(SortByArtist);
-    orders.push_back(SortByTitle);
-    orders.push_back(SortByYear);
-    orders.push_back(SortByTime);
-    orders.push_back(SortByTrackNumber);
-    orders.push_back(SortByFile);
-    orders.push_back(SortByPath);
-    orders.push_back(SortByPlaycount);
-    orders.push_back(SortByLastPlayed);
+    orders.push_back(SortBy::GENRE);
+    orders.push_back(SortBy::ALBUM);
+    orders.push_back(SortBy::ARTIST);
+    orders.push_back(SortBy::TITLE);
+    orders.push_back(SortBy::YEAR);
+    orders.push_back(SortBy::TIME);
+    orders.push_back(SortBy::TRACK_NUMBER);
+    orders.push_back(SortBy::FILE);
+    orders.push_back(SortBy::PATH);
+    orders.push_back(SortBy::PLAYCOUNT);
+    orders.push_back(SortBy::LAST_PLAYED);
   }
   else if (type == "songs")
   {
-    orders.push_back(SortByGenre);
-    orders.push_back(SortByAlbum);
-    orders.push_back(SortByArtist);
-    orders.push_back(SortByTitle);
-    orders.push_back(SortByYear);
+    orders.push_back(SortBy::GENRE);
+    orders.push_back(SortBy::ALBUM);
+    orders.push_back(SortBy::ARTIST);
+    orders.push_back(SortBy::TITLE);
+    orders.push_back(SortBy::YEAR);
     if (!CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
       CSettings::SETTING_MUSICLIBRARY_USEORIGINALDATE))
-      orders.push_back(SortByOrigDate);
-    orders.push_back(SortByTime);
-    orders.push_back(SortByTrackNumber);
-    orders.push_back(SortByFile);
-    orders.push_back(SortByPath);
-    orders.push_back(SortByPlaycount);
-    orders.push_back(SortByLastPlayed);
-    orders.push_back(SortByDateAdded);
-    orders.push_back(SortByRating);
-    orders.push_back(SortByUserRating);
-    orders.push_back(SortByBPM);
+      orders.push_back(SortBy::ORIG_DATE);
+    orders.push_back(SortBy::TIME);
+    orders.push_back(SortBy::TRACK_NUMBER);
+    orders.push_back(SortBy::FILE);
+    orders.push_back(SortBy::PATH);
+    orders.push_back(SortBy::PLAYCOUNT);
+    orders.push_back(SortBy::LAST_PLAYED);
+    orders.push_back(SortBy::DATE_ADDED);
+    orders.push_back(SortBy::RATING);
+    orders.push_back(SortBy::USER_RATING);
+    orders.push_back(SortBy::BPM);
   }
   else if (type == "albums")
   {
-    orders.push_back(SortByGenre);
-    orders.push_back(SortByAlbum);
-    orders.push_back(SortByTotalDiscs);
-    orders.push_back(SortByArtist);        // any artist
-    orders.push_back(SortByYear);
+    orders.push_back(SortBy::GENRE);
+    orders.push_back(SortBy::ALBUM);
+    orders.push_back(SortBy::TOTAL_DISCS);
+    orders.push_back(SortBy::ARTIST); // any artist
+    orders.push_back(SortBy::YEAR);
     if (!CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
         CSettings::SETTING_MUSICLIBRARY_USEORIGINALDATE))
-      orders.push_back(SortByOrigDate);
+      orders.push_back(SortBy::ORIG_DATE);
     //orders.push_back(SortByThemes);
     //orders.push_back(SortByMoods);
     //orders.push_back(SortByStyles);
-    orders.push_back(SortByAlbumType);
+    orders.push_back(SortBy::ALBUM_TYPE);
     //orders.push_back(SortByMusicLabel);
-    orders.push_back(SortByRating);
-    orders.push_back(SortByUserRating);
-    orders.push_back(SortByPlaycount);
-    orders.push_back(SortByLastPlayed);
-    orders.push_back(SortByDateAdded);
+    orders.push_back(SortBy::RATING);
+    orders.push_back(SortBy::USER_RATING);
+    orders.push_back(SortBy::PLAYCOUNT);
+    orders.push_back(SortBy::LAST_PLAYED);
+    orders.push_back(SortBy::DATE_ADDED);
   }
   else if (type == "artists")
   {
-    orders.push_back(SortByArtist);
+    orders.push_back(SortBy::ARTIST);
   }
   else if (type == "tvshows")
   {
-    orders.push_back(SortBySortTitle);
-    orders.push_back(SortByOriginalTitle);
-    orders.push_back(SortByTvShowStatus);
-    orders.push_back(SortByVotes);
-    orders.push_back(SortByRating);
-    orders.push_back(SortByUserRating);
-    orders.push_back(SortByYear);
-    orders.push_back(SortByGenre);
-    orders.push_back(SortByNumberOfEpisodes);
-    orders.push_back(SortByNumberOfWatchedEpisodes);
+    orders.push_back(SortBy::SORT_TITLE);
+    orders.push_back(SortBy::ORIGINAL_TITLE);
+    orders.push_back(SortBy::TVSHOW_STATUS);
+    orders.push_back(SortBy::VOTES);
+    orders.push_back(SortBy::RATING);
+    orders.push_back(SortBy::USER_RATING);
+    orders.push_back(SortBy::YEAR);
+    orders.push_back(SortBy::GENRE);
+    orders.push_back(SortBy::NUMBER_OF_EPISODES);
+    orders.push_back(SortBy::NUMBER_OF_WATCHED_EPISODES);
     //orders.push_back(SortByPlaycount);
-    orders.push_back(SortByPath);
-    orders.push_back(SortByStudio);
-    orders.push_back(SortByMPAA);
-    orders.push_back(SortByDateAdded);
-    orders.push_back(SortByLastPlayed);
+    orders.push_back(SortBy::PATH);
+    orders.push_back(SortBy::STUDIO);
+    orders.push_back(SortBy::MPAA);
+    orders.push_back(SortBy::DATE_ADDED);
+    orders.push_back(SortBy::LAST_PLAYED);
   }
   else if (type == "episodes")
   {
-    orders.push_back(SortByTitle);
-    orders.push_back(SortByOriginalTitle);
-    orders.push_back(SortByTvShowTitle);
-    orders.push_back(SortByVotes);
-    orders.push_back(SortByRating);
-    orders.push_back(SortByUserRating);
-    orders.push_back(SortByTime);
-    orders.push_back(SortByPlaycount);
-    orders.push_back(SortByLastPlayed);
-    orders.push_back(SortByYear); // premiered/dateaired
-    orders.push_back(SortByEpisodeNumber);
-    orders.push_back(SortBySeason);
-    orders.push_back(SortByFile);
-    orders.push_back(SortByPath);
-    orders.push_back(SortByStudio);
-    orders.push_back(SortByMPAA);
-    orders.push_back(SortByDateAdded);
+    orders.push_back(SortBy::TITLE);
+    orders.push_back(SortBy::ORIGINAL_TITLE);
+    orders.push_back(SortBy::TVSHOW_TITLE);
+    orders.push_back(SortBy::VOTES);
+    orders.push_back(SortBy::RATING);
+    orders.push_back(SortBy::USER_RATING);
+    orders.push_back(SortBy::TIME);
+    orders.push_back(SortBy::PLAYCOUNT);
+    orders.push_back(SortBy::LAST_PLAYED);
+    orders.push_back(SortBy::YEAR); // premiered/dateaired
+    orders.push_back(SortBy::EPISODE_NUMBER);
+    orders.push_back(SortBy::SEASON);
+    orders.push_back(SortBy::FILE);
+    orders.push_back(SortBy::PATH);
+    orders.push_back(SortBy::STUDIO);
+    orders.push_back(SortBy::MPAA);
+    orders.push_back(SortBy::DATE_ADDED);
   }
   else if (type == "movies")
   {
-    orders.push_back(SortBySortTitle);
-    orders.push_back(SortByOriginalTitle);
-    orders.push_back(SortByVotes);
-    orders.push_back(SortByRating);
-    orders.push_back(SortByUserRating);
-    orders.push_back(SortByTime);
-    orders.push_back(SortByPlaycount);
-    orders.push_back(SortByLastPlayed);
-    orders.push_back(SortByGenre);
-    orders.push_back(SortByCountry);
-    orders.push_back(SortByYear); // premiered
-    orders.push_back(SortByMPAA);
-    orders.push_back(SortByTop250);
-    orders.push_back(SortByStudio);
-    orders.push_back(SortByFile);
-    orders.push_back(SortByPath);
-    orders.push_back(SortByDateAdded);
+    orders.push_back(SortBy::SORT_TITLE);
+    orders.push_back(SortBy::ORIGINAL_TITLE);
+    orders.push_back(SortBy::VOTES);
+    orders.push_back(SortBy::RATING);
+    orders.push_back(SortBy::USER_RATING);
+    orders.push_back(SortBy::TIME);
+    orders.push_back(SortBy::PLAYCOUNT);
+    orders.push_back(SortBy::LAST_PLAYED);
+    orders.push_back(SortBy::GENRE);
+    orders.push_back(SortBy::COUNTRY);
+    orders.push_back(SortBy::YEAR); // premiered
+    orders.push_back(SortBy::MPAA);
+    orders.push_back(SortBy::TOP250);
+    orders.push_back(SortBy::STUDIO);
+    orders.push_back(SortBy::FILE);
+    orders.push_back(SortBy::PATH);
+    orders.push_back(SortBy::DATE_ADDED);
   }
   else if (type == "musicvideos")
   {
-    orders.push_back(SortByTitle);
-    orders.push_back(SortByGenre);
-    orders.push_back(SortByAlbum);
-    orders.push_back(SortByYear);
-    orders.push_back(SortByArtist);
-    orders.push_back(SortByFile);
-    orders.push_back(SortByPath);
-    orders.push_back(SortByPlaycount);
-    orders.push_back(SortByLastPlayed);
-    orders.push_back(SortByTime);
-    orders.push_back(SortByRating);
-    orders.push_back(SortByUserRating);
-    orders.push_back(SortByStudio);
-    orders.push_back(SortByDateAdded);
+    orders.push_back(SortBy::TITLE);
+    orders.push_back(SortBy::GENRE);
+    orders.push_back(SortBy::ALBUM);
+    orders.push_back(SortBy::YEAR);
+    orders.push_back(SortBy::ARTIST);
+    orders.push_back(SortBy::FILE);
+    orders.push_back(SortBy::PATH);
+    orders.push_back(SortBy::PLAYCOUNT);
+    orders.push_back(SortBy::LAST_PLAYED);
+    orders.push_back(SortBy::TIME);
+    orders.push_back(SortBy::RATING);
+    orders.push_back(SortBy::USER_RATING);
+    orders.push_back(SortBy::STUDIO);
+    orders.push_back(SortBy::DATE_ADDED);
   }
-  orders.push_back(SortByRandom);
+  orders.push_back(SortBy::RANDOM);
 
   return orders;
 }
@@ -783,10 +747,11 @@ std::string CSmartPlaylistRule::GetLocalizedGroup(Field group)
   for (const auto & i : groups)
   {
     if (group == i.field)
-      return g_localizeStrings.Get(i.localizedString);
+      return CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(i.localizedString);
   }
 
-  return g_localizeStrings.Get(groups[0].localizedString);
+  return CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(
+      groups[0].localizedString);
 }
 
 bool CSmartPlaylistRule::CanGroupMix(Field group)
@@ -1420,7 +1385,9 @@ bool CSmartPlaylist::Load(const CVariant &obj)
   {
     const CVariant &order = obj["order"];
     if (order.isMember("direction") && order["direction"].isString())
-      m_orderDirection = StringUtils::EqualsNoCase(order["direction"].asString(), "ascending") ? SortOrderAscending : SortOrderDescending;
+      m_orderDirection = StringUtils::EqualsNoCase(order["direction"].asString(), "ascending")
+                             ? SortOrder::ASCENDING
+                             : SortOrder::DESCENDING;
 
     if (order.isMember("ignorefolders") && obj["ignorefolders"].isBoolean())
       m_orderAttributes = obj["ignorefolders"].asBoolean() ? SortAttributeIgnoreFolders : SortAttributeNone;
@@ -1477,7 +1444,8 @@ bool CSmartPlaylist::LoadFromXML(const TiXmlNode *root, const std::string &encod
   {
     const char *direction = order->Attribute("direction");
     if (direction)
-      m_orderDirection = StringUtils::EqualsNoCase(direction, "ascending") ? SortOrderAscending : SortOrderDescending;
+      m_orderDirection = StringUtils::EqualsNoCase(direction, "ascending") ? SortOrder::ASCENDING
+                                                                           : SortOrder::DESCENDING;
 
     const char *ignorefolders = order->Attribute("ignorefolders");
     if (ignorefolders != NULL)
@@ -1540,11 +1508,12 @@ bool CSmartPlaylist::Save(const std::string &path) const
     XMLUtils::SetInt(pRoot, "limit", m_limit);
 
   // add <order> tag
-  if (m_orderField != SortByNone)
+  if (m_orderField != SortBy::NONE)
   {
     TiXmlText order(CSmartPlaylistRule::TranslateOrder(m_orderField).c_str());
     TiXmlElement nodeOrder("order");
-    nodeOrder.SetAttribute("direction", m_orderDirection == SortOrderDescending ? "descending" : "ascending");
+    nodeOrder.SetAttribute("direction",
+                           m_orderDirection == SortOrder::DESCENDING ? "descending" : "ascending");
     if (m_orderAttributes & SortAttributeIgnoreFolders)
       nodeOrder.SetAttribute("ignorefolders", "true");
     nodeOrder.InsertEndChild(order);
@@ -1579,11 +1548,12 @@ bool CSmartPlaylist::Save(CVariant &obj, bool full /* = true */) const
     obj["limit"] = m_limit;
 
   // add "order"
-  if (full && m_orderField != SortByNone)
+  if (full && m_orderField != SortBy::NONE)
   {
     obj["order"] = CVariant(CVariant::VariantTypeObject);
     obj["order"]["method"] = CSmartPlaylistRule::TranslateOrder(m_orderField);
-    obj["order"]["direction"] = m_orderDirection == SortOrderDescending ? "descending" : "ascending";
+    obj["order"]["direction"] =
+        m_orderDirection == SortOrder::DESCENDING ? "descending" : "ascending";
     obj["order"]["ignorefolders"] = (m_orderAttributes & SortAttributeIgnoreFolders);
   }
 
@@ -1603,8 +1573,8 @@ void CSmartPlaylist::Reset()
 {
   m_ruleCombination.clear();
   m_limit = 0;
-  m_orderField = SortByNone;
-  m_orderDirection = SortOrderNone;
+  m_orderField = SortBy::NONE;
+  m_orderDirection = SortOrder::NONE;
   m_orderAttributes = SortAttributeNone;
   m_playlistType = "songs"; // sane default
   m_group.clear();
@@ -1681,7 +1651,7 @@ bool CSmartPlaylist::IsEmpty(bool ignoreSortAndLimit /* = true */) const
 {
   bool empty = m_ruleCombination.empty();
   if (empty && !ignoreSortAndLimit)
-    empty = m_limit <= 0 && m_orderField == SortByNone && m_orderDirection == SortOrderNone;
+    empty = m_limit == 0 && m_orderField == SortBy::NONE && m_orderDirection == SortOrder::NONE;
 
   return empty;
 }

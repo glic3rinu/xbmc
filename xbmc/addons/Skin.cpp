@@ -17,11 +17,13 @@
 #include "filesystem/Directory.h"
 #include "filesystem/SpecialProtocol.h"
 #include "guilib/GUIComponent.h"
+#include "guilib/GUIUtils.h"
 #include "guilib/GUIWindowManager.h"
-#include "guilib/LocalizeStrings.h"
 #include "guilib/WindowIDs.h"
 #include "messaging/ApplicationMessenger.h"
 #include "messaging/helpers/DialogHelper.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "settings/lib/Setting.h"
@@ -33,6 +35,7 @@
 #include "utils/Variant.h"
 #include "utils/XMLUtils.h"
 #include "utils/log.h"
+#include "windowing/WinSystem.h"
 
 #include <algorithm>
 #include <charconv>
@@ -478,7 +481,8 @@ void CSkinInfo::SettingOptionsSkinColorsFiller(const SettingConstPtr& setting,
   // any other *.xml files are additional color themes on top of this one.
 
   // add the default label
-  list.emplace_back(g_localizeStrings.Get(15109), "SKINDEFAULT"); // the standard defaults.xml will be used!
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(15109),
+                    "SKINDEFAULT"); // the standard defaults.xml will be used!
 
   // Search for colors in the Current skin!
   std::vector<std::string> vecColors;
@@ -531,7 +535,7 @@ void GetFontsetsFromFile(const std::string& fontsetFilePath,
         if (idAttr)
         {
           if (idLocAttr)
-            list.emplace_back(g_localizeStrings.Get(atoi(idLocAttr)), idAttr);
+            list.emplace_back(CGUIUtils::GetLocalizedString(std::atoi(idLocAttr)), idAttr);
           else
             list.emplace_back(idAttr, idAttr);
 
@@ -571,7 +575,7 @@ void CSkinInfo::SettingOptionsSkinFontsFiller(const SettingConstPtr& setting,
   if (list.empty())
   { // Since no fontset is defined, there is no selection of a fontset, so disable the component
     CLog::LogF(LOGERROR, "No fontsets found");
-    list.emplace_back(g_localizeStrings.Get(13278), "");
+    list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(13278), "");
     current = "";
     currentValueSet = true;
   }
@@ -593,7 +597,8 @@ void CSkinInfo::SettingOptionsSkinThemesFiller(const SettingConstPtr& setting,
   // any other *.xbt files are additional themes on top of this one.
 
   // add the default Label
-  list.emplace_back(g_localizeStrings.Get(15109), "SKINDEFAULT"); // the standard Textures.xbt will be used
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(15109),
+                    "SKINDEFAULT"); // the standard Textures.xbt will be used
 
   // search for themes in the current skin!
   std::vector<std::string> vecTheme;
@@ -628,7 +633,7 @@ void CSkinInfo::SettingOptionsStartupWindowsFiller(const SettingConstPtr& settin
   {
     std::string windowName = window.m_name;
     if (StringUtils::IsNaturalNumber(windowName))
-      windowName = g_localizeStrings.Get(std::atoi(windowName.c_str()));
+      windowName = CGUIUtils::GetLocalizedString(std::atoi(windowName.c_str()));
     const int windowID = window.m_id;
 
     list.emplace_back(windowName, windowID);

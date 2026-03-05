@@ -18,6 +18,7 @@
 #include "DVDOverlayContainer.h"
 #include "Interface/TimingConstants.h"
 #include "Process/ProcessInfo.h"
+#include "ServiceBroker.h"
 #include "VideoRenderers/RenderManager.h"
 #include "application/ApplicationVolumeHandling.h"
 #include "cores/AudioEngine/Encoders/AEEncoderFFmpeg.h"
@@ -330,12 +331,14 @@ bool CMediaPipelineWebOS::OpenAudioStream(CDVDStreamInfo& audioHint)
                                               ? "starfish-EAC3 (transcoding)"
                                               : "starfish-AC3 (transcoding)");
       }
+      m_audioClosed = false;
       return true;
     }
     // API introduced in webOS 6.0, so we need to handle older versions differently
     Unload(true);
 
     m_mediaAPIs = std::make_unique<StarfishMediaAPIs>();
+    m_audioClosed = false;
   }
 
   if (m_audioHint.codec && m_videoHint.codec)
@@ -353,6 +356,7 @@ bool CMediaPipelineWebOS::OpenVideoStream(CDVDStreamInfo hint)
 
   if (m_loaded)
   {
+    m_videoClosed = false;
     if (m_videoHint.codec == hint.codec && m_videoHint.hdrType == hint.hdrType)
     {
       std::scoped_lock lock(m_videoCriticalSection);
@@ -388,12 +392,28 @@ bool CMediaPipelineWebOS::OpenVideoStream(CDVDStreamInfo hint)
   return true;
 }
 
-void CMediaPipelineWebOS::CloseAudioStream(bool waitForBuffers)
+void CMediaPipelineWebOS::CloseAudioStream(const bool waitForBuffers)
 {
+  m_audioClosed = true;
+  if (m_videoClosed && m_audioClosed)
+  {
+    Unload(waitForBuffers);
+    m_audioHint = CDVDStreamInfo();
+    m_videoHint = CDVDStreamInfo();
+    m_mediaAPIs = std::make_unique<StarfishMediaAPIs>();
+  }
 }
 
-void CMediaPipelineWebOS::CloseVideoStream(bool waitForBuffers)
+void CMediaPipelineWebOS::CloseVideoStream(const bool waitForBuffers)
 {
+  m_videoClosed = true;
+  if (m_videoClosed && m_audioClosed)
+  {
+    Unload(waitForBuffers);
+    m_audioHint = CDVDStreamInfo();
+    m_videoHint = CDVDStreamInfo();
+    m_mediaAPIs = std::make_unique<StarfishMediaAPIs>();
+  }
 }
 
 void CMediaPipelineWebOS::Flush(bool sync)
@@ -765,6 +785,9 @@ bool CMediaPipelineWebOS::Load(CDVDStreamInfo videoHint, CDVDStreamInfo audioHin
     }
   }
 
+  m_videoClosed = false;
+  if (m_hasAudio)
+    m_audioClosed = false;
   m_renderManager.ShowVideo(true);
   return true;
 }

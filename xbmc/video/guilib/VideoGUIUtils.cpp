@@ -23,12 +23,13 @@
 #include "filesystem/VideoDatabaseDirectory/DirectoryNode.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
-#include "guilib/LocalizeStrings.h"
 #include "music/MusicFileItemClassify.h"
 #include "network/NetworkFileItemClassify.h"
 #include "playlists/PlayList.h"
 #include "playlists/PlayListFileItemClassify.h"
 #include "profiles/ProfileManager.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "settings/MediaSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -88,7 +89,7 @@ SortDescription GetSortDescription(const CGUIViewState& state, const CFileItemLi
   auto sortDescriptions = state.GetSortDescriptions();
   for (auto& sortDescription : sortDescriptions)
   {
-    if (sortDescription.sortBy == SortByEpisodeNumber)
+    if (sortDescription.sortBy == SortBy::EPISODE_NUMBER)
     {
       // check whether at least one item has actually an episode number set
       for (const auto& item : items)
@@ -96,13 +97,13 @@ SortDescription GetSortDescription(const CGUIViewState& state, const CFileItemLi
         if (item->HasVideoInfoTag() && item->GetVideoInfoTag()->m_iEpisode > 0)
         {
           // first choice for folders containing episodes
-          sortDescription.sortOrder = SortOrderAscending;
+          sortDescription.sortOrder = SortOrder::ASCENDING;
           return sortDescription;
         }
       }
       continue;
     }
-    else if (sortDescription.sortBy == SortByYear)
+    else if (sortDescription.sortBy == SortBy::YEAR)
     {
       // check whether at least one item has actually a year set
       for (const auto& item : items)
@@ -110,12 +111,12 @@ SortDescription GetSortDescription(const CGUIViewState& state, const CFileItemLi
         if (item->HasVideoInfoTag() && item->GetVideoInfoTag()->HasYear())
         {
           // first choice for folders containing movies
-          sortDescription.sortOrder = SortOrderAscending;
+          sortDescription.sortOrder = SortOrder::ASCENDING;
           return sortDescription;
         }
       }
     }
-    else if (sortDescription.sortBy == SortByDate)
+    else if (sortDescription.sortBy == SortBy::DATE)
     {
       // check whether at least one item has actually a valid date set
       for (const auto& item : items)
@@ -124,14 +125,14 @@ SortDescription GetSortDescription(const CGUIViewState& state, const CFileItemLi
         {
           // fallback, if neither ByEpisode nor ByYear is available
           sortDescDate = sortDescription;
-          sortDescDate.sortOrder = SortOrderAscending;
+          sortDescDate.sortOrder = SortOrder::ASCENDING;
           break; // leave items loop. we can still find ByEpisode or ByYear. so, no return here.
         }
       }
     }
   }
 
-  if (sortDescDate.sortBy != SortByNone)
+  if (sortDescDate.sortBy != SortBy::NONE)
     return sortDescDate;
   else
     return state.GetSortMethod(); // last resort
@@ -200,14 +201,14 @@ void CAsyncGetItemsForPlaylist::GetItemsForPlaylist(const std::shared_ptr<CFileI
         // It makes no sense to play from younger to older, except "play from here"
         // mode where order of listing has to be kept.
         if (m_mode != ContentUtils::PlayMode::PLAY_FROM_HERE &&
-            (sortDesc.sortBy == SortByDate || sortDesc.sortBy == SortByYear ||
-             sortDesc.sortBy == SortByEpisodeNumber))
-          sortDesc.sortOrder = SortOrderAscending;
+            (sortDesc.sortBy == SortBy::DATE || sortDesc.sortBy == SortBy::YEAR ||
+             sortDesc.sortBy == SortBy::EPISODE_NUMBER))
+          sortDesc.sortOrder = SortOrder::ASCENDING;
       }
       else
         sortDesc = GetSortDescription(*state, items);
 
-      if (sortDesc.sortBy == SortByLabel)
+      if (sortDesc.sortBy == SortBy::LABEL)
         items.ClearSortState();
 
       items.Sort(sortDesc);
@@ -661,7 +662,7 @@ std::string GetResumeString(int64_t startOffset, unsigned int partNumber)
   if (startOffset > 0)
   {
     resumeString =
-        StringUtils::Format(g_localizeStrings.Get(12022),
+        StringUtils::Format(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(12022),
                             StringUtils::SecondsToTimeString(
                                 static_cast<long>(CUtil::ConvertMilliSecsToSecsInt(startOffset)),
                                 TIME_FORMAT_HH_MM_SS)); // Resume from ##:##:##
@@ -669,14 +670,17 @@ std::string GetResumeString(int64_t startOffset, unsigned int partNumber)
   else
   {
     if (partNumber > 0)
-      resumeString = g_localizeStrings.Get(12023); // Resume from
+      resumeString =
+          CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(12023); // Resume from
     else
-      resumeString = g_localizeStrings.Get(13362); // Continue watching
+      resumeString = CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(
+          13362); // Continue watching
   }
   if (partNumber > 0)
   {
     const std::string partString{
-        StringUtils::Format(g_localizeStrings.Get(23051), partNumber)}; // Part #
+        StringUtils::Format(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(23051),
+                            partNumber)}; // Part #
     resumeString += startOffset > 0 ? " (" + partString + ")" : " " + partString;
   }
   return resumeString;

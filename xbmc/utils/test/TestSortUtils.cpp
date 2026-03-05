@@ -16,25 +16,25 @@ TEST(TestSortUtils, Sort_SortBy)
   SortItems items;
 
   CVariant variant1("M Artist");
-  SortItemPtr item1(new SortItem());
+  auto item1 = std::make_shared<SortItem>();
   (*item1)[FieldArtist] = variant1;
   CVariant variant2("B Artist");
-  SortItemPtr item2(new SortItem());
+  auto item2 = std::make_shared<SortItem>();
   (*item2)[FieldArtist] = variant2;
   CVariant variant3("R Artist");
-  SortItemPtr item3(new SortItem());
+  auto item3 = std::make_shared<SortItem>();
   (*item3)[FieldArtist] = variant3;
   CVariant variant4("R Artist");
-  SortItemPtr item4(new SortItem());
+  auto item4 = std::make_shared<SortItem>();
   (*item4)[FieldArtist] = variant4;
   CVariant variant5("I Artist");
-  SortItemPtr item5(new SortItem());
+  auto item5 = std::make_shared<SortItem>();
   (*item5)[FieldArtist] = variant5;
   CVariant variant6("A Artist");
-  SortItemPtr item6(new SortItem());
+  auto item6 = std::make_shared<SortItem>();
   (*item6)[FieldArtist] = variant6;
   CVariant variant7("G Artist");
-  SortItemPtr item7(new SortItem());
+  auto item7 = std::make_shared<SortItem>();
   (*item7)[FieldArtist] = variant7;
 
   items.push_back(item1);
@@ -45,7 +45,7 @@ TEST(TestSortUtils, Sort_SortBy)
   items.push_back(item6);
   items.push_back(item7);
 
-  SortUtils::Sort(SortByArtist, SortOrderAscending, SortAttributeNone, items);
+  SortUtils::Sort(SortBy::ARTIST, SortOrder::ASCENDING, SortAttributeNone, items);
 
   EXPECT_STREQ("A Artist", (*items.at(0))[FieldArtist].asString().c_str());
   EXPECT_STREQ("B Artist", (*items.at(1))[FieldArtist].asString().c_str());
@@ -61,25 +61,25 @@ TEST(TestSortUtils, Sort_SortDescription)
   SortItems items;
 
   CVariant variant1("M Artist");
-  SortItemPtr item1(new SortItem());
+  auto item1 = std::make_shared<SortItem>();
   (*item1)[FieldArtist] = variant1;
   CVariant variant2("B Artist");
-  SortItemPtr item2(new SortItem());
+  auto item2 = std::make_shared<SortItem>();
   (*item2)[FieldArtist] = variant2;
   CVariant variant3("R Artist");
-  SortItemPtr item3(new SortItem());
+  auto item3 = std::make_shared<SortItem>();
   (*item3)[FieldArtist] = variant3;
   CVariant variant4("R Artist");
-  SortItemPtr item4(new SortItem());
+  auto item4 = std::make_shared<SortItem>();
   (*item4)[FieldArtist] = variant4;
   CVariant variant5("I Artist");
-  SortItemPtr item5(new SortItem());
+  auto item5 = std::make_shared<SortItem>();
   (*item5)[FieldArtist] = variant5;
   CVariant variant6("A Artist");
-  SortItemPtr item6(new SortItem());
+  auto item6 = std::make_shared<SortItem>();
   (*item6)[FieldArtist] = variant6;
   CVariant variant7("G Artist");
-  SortItemPtr item7(new SortItem());
+  auto item7 = std::make_shared<SortItem>();
   (*item7)[FieldArtist] = variant7;
 
   items.push_back(item1);
@@ -91,7 +91,7 @@ TEST(TestSortUtils, Sort_SortDescription)
   items.push_back(item7);
 
   SortDescription desc;
-  desc.sortBy = SortByArtist;
+  desc.sortBy = SortBy::ARTIST;
   SortUtils::Sort(desc, items);
 
   EXPECT_STREQ("A Artist", (*items.at(0))[FieldArtist].asString().c_str());
@@ -107,7 +107,7 @@ TEST(TestSortUtils, GetFieldsForSorting)
 {
   Fields fields;
 
-  fields = SortUtils::GetFieldsForSorting(SortByArtist);
+  fields = SortUtils::GetFieldsForSorting(SortBy::ARTIST);
   Fields::iterator it;
   it = fields.find(FieldAlbum);
   EXPECT_EQ(FieldAlbum, *it);

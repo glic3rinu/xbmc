@@ -22,8 +22,8 @@
 #include "input/actions/Action.h"
 #include "input/actions/ActionIDs.h"
 #include "utils/FileUtils.h"
-#include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
+#include "windowing/WinSystem.h"
 
 #include <mutex>
 

@@ -17,8 +17,9 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIEditControl.h"
 #include "guilib/GUIWindowManager.h"
-#include "guilib/LocalizeStrings.h"
 #include "music/MusicDatabase.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "settings/MediaSourceSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -181,7 +182,8 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
   else if (m_rule.m_field == FieldArtist || m_rule.m_field == FieldAlbumArtist)
   {
     if (PLAYLIST::CSmartPlaylist::IsMusicType(m_type))
-      database.GetArtistsNav("musicdb://artists/", items, m_rule.m_field == FieldAlbumArtist, -1);
+      database.GetArtistsNav("musicdb://artists/", items, SortDescription(),
+                             m_rule.m_field == FieldAlbumArtist, -1);
     if (m_type == "musicvideos" ||
         m_type == "mixed")
     {
@@ -194,7 +196,7 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
   else if (m_rule.m_field == FieldAlbum)
   {
     if (PLAYLIST::CSmartPlaylist::IsMusicType(m_type))
-      database.GetAlbumsNav("musicdb://albums/", items);
+      database.GetAlbumsNav("musicdb://albums/", items, SortDescription());
     if (m_type == "musicvideos" ||
         m_type == "mixed")
     {
@@ -251,7 +253,7 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
   {
     if (m_type == "songs" || m_type == "mixed")
     {
-      database.GetSongsNav("musicdb://songs/", items, -1, -1, -1);
+      database.GetSongsNav("musicdb://songs/", items, SortDescription(), -1, -1, -1);
       iLabel = 134;
     }
     if (m_type == "movies")
@@ -324,7 +326,9 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
     CServiceBroker::GetMediaManager().GetLocalDrives(sources);
 
     std::string path = m_rule.GetParameter();
-    CGUIDialogFileBrowser::ShowAndGetDirectory(sources, g_localizeStrings.Get(657), path, false);
+    CGUIDialogFileBrowser::ShowAndGetDirectory(
+        sources, CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(657), path,
+        false);
     if (!m_rule.m_parameter.empty())
       m_rule.m_parameter.clear();
     if (!path.empty())
@@ -358,13 +362,18 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
   }
 
   // sort the items
-  items.Sort(SortByLabel, SortOrderAscending, CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
+  items.Sort(SortBy::LABEL, SortOrder::ASCENDING,
+             CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+                 CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING)
+                 ? SortAttributeIgnoreArticle
+                 : SortAttributeNone);
 
   CGUIDialogSelect* pDialog = CServiceBroker::GetGUI()->GetWindowManager().GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
   pDialog->Reset();
   pDialog->SetItems(items);
   std::string strHeading =
-      StringUtils::Format(g_localizeStrings.Get(13401), g_localizeStrings.Get(iLabel));
+      StringUtils::Format(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(13401),
+                          CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(iLabel));
   pDialog->SetHeading(CVariant{std::move(strHeading)});
   pDialog->SetMultiSelection(m_rule.m_field != FieldPlaylist && m_rule.m_field != FieldVirtualFolder);
 

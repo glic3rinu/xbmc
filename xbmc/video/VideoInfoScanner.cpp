@@ -29,12 +29,13 @@
 #include "filesystem/PluginDirectory.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
-#include "guilib/LocalizeStrings.h"
 #include "imagefiles/ImageFileURL.h"
 #include "interfaces/AnnouncementManager.h"
 #include "messaging/helpers/DialogHelper.h"
 #include "messaging/helpers/DialogOKHelper.h"
 #include "playlists/PlayListFileItemClassify.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
@@ -159,7 +160,8 @@ void AddLocalItemArtwork(KODI::ART::Artwork& itemArt,
                          const std::vector<std::string>& wantedArtTypes,
                          const std::string& itemPath,
                          bool addAll,
-                         bool exactName)
+                         bool exactName,
+                         bool isInFolder)
 {
   std::string path = URIUtils::GetDirectory(itemPath);
   if (path.empty())
@@ -188,7 +190,7 @@ void AddLocalItemArtwork(KODI::ART::Artwork& itemArt,
                          (caseSensitive ? StringUtils::StartsWith(candidate, baseFilename)
                                         : StringUtils::StartsWithNoCase(candidate, baseFilename))};
 
-    if (!baseFilename.empty() && !matchesFilename)
+    if (!baseFilename.empty() && !matchesFilename && !isInFolder)
       continue;
 
     if (matchesFilename)
@@ -263,7 +265,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
         CGUIDialogExtendedProgressBar* dialog =
           CServiceBroker::GetGUI()->GetWindowManager().GetWindow<CGUIDialogExtendedProgressBar>(WINDOW_DIALOG_EXT_PROGRESS);
         if (dialog)
-           m_handle = dialog->GetHandle(g_localizeStrings.Get(314));
+          m_handle = dialog->GetHandle(
+              CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(314));
       }
 
       // check if we only need to perform a cleaning
@@ -332,7 +335,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
         else
         {
           if (m_handle)
-            m_handle->SetTitle(g_localizeStrings.Get(331));
+            m_handle->SetTitle(
+                CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(331));
           m_database.Compress(false);
         }
       }
@@ -408,7 +412,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
   {
     if (m_handle)
     {
-      m_handle->SetText(g_localizeStrings.Get(20415));
+      m_handle->SetText(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(20415));
     }
 
     /*
@@ -460,7 +464,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
       if (m_handle)
       {
         int str = content == ContentType::MOVIES ? 20317 : 20318;
-        m_handle->SetTitle(StringUtils::Format(g_localizeStrings.Get(str), info->Name()));
+        m_handle->SetTitle(StringUtils::Format(
+            CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(str), info->Name()));
       }
 
       std::string fastHash;
@@ -483,7 +488,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
         // force sorting consistency to avoid hash mismatch between platforms
         // sort by filename as always present for any files, but keep case sensitivity
-        items.Sort(SortByFile, SortOrderAscending, SortAttributeNone);
+        items.Sort(SortBy::FILE, SortOrder::ASCENDING, SortAttributeNone);
 
         // check whether to re-use previously computed fast hash
         if (!CanFastHash(items, regexps) || fastHash.empty())
@@ -522,7 +527,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
     else if (content == ContentType::TVSHOWS)
     {
       if (m_handle)
-        m_handle->SetTitle(StringUtils::Format(g_localizeStrings.Get(20319), info->Name()));
+        m_handle->SetTitle(StringUtils::Format(
+            CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(20319), info->Name()));
 
       if (foundDirectly && !settings.parent_name_root)
       {
@@ -532,7 +538,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
         // force sorting consistency to avoid hash mismatch between platforms
         // sort by filename as always present for any files, but keep case sensitivity
-        items.Sort(SortByFile, SortOrderAscending, SortAttributeNone);
+        items.Sort(SortBy::FILE, SortOrder::ASCENDING, SortAttributeNone);
 
         GetPathHash(items, hash);
         bSkip = true;
@@ -657,7 +663,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
       // Look for local art files first
       const std::vector<std::string> movieSetArtTypes =
           CVideoThumbLoader::GetArtTypes(MediaTypeVideoCollection);
-      AddLocalItemArtwork(movieSetArt, movieSetArtTypes, movieSetInfoPath, true, false);
+      AddLocalItemArtwork(movieSetArt, movieSetArtTypes, movieSetInfoPath, true, false, true);
 
       // If art specified in set.nfo use that next
       if (movieSetArt.empty() && tag.m_set.HasArt())
@@ -778,7 +784,9 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
           eventLog->Add(EventPtr(new CMediaLibraryEvent(
               mediaType, pItem->GetPath(), 24145,
-              StringUtils::Format(g_localizeStrings.Get(24147), mediaType, itemlogpath),
+              StringUtils::Format(
+                  CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(24147),
+                  mediaType, itemlogpath),
               EventLevel::Warning)));
         }
       }
@@ -843,13 +851,14 @@ CVideoInfoScanner::~CVideoInfoScanner()
       if (isSeason && idTvShow > -1)
         idSeason = m_database.GetSeasonId(idTvShow, pItem->GetVideoInfoTag()->m_iSeason);
     }
-    if (idTvShow > -1 && (!isSeason || idSeason > -1) && (fetchEpisodes || !pItem->IsFolder()))
-    {
-      InfoRet ret = RetrieveInfoForEpisodes(pItem, idTvShow, info2, useLocal, pDlgProgress);
-      if (ret == InfoRet::ADDED)
-        m_database.SetPathHash(strPath, pItem->GetProperty("hash").asString());
-      return ret;
-    }
+
+    // Enumerate episodes here as this compares hashes of folders containing episodes from this show
+    //  and we want to do this before processing nfo files
+    EPISODELIST files;
+    if (!EnumerateSeriesFolder(pItem, files))
+      return InfoRet::HAVE_ALREADY;
+    if (files.empty()) // no update or no files
+      return InfoRet::NOT_NEEDED;
 
     if (ProgressCancelled(pDlgProgress, pItem->IsFolder() ? 20353 : 20361,
                           pItem->IsFolder() ? pItem->GetVideoInfoTag()->m_strShowTitle
@@ -866,7 +875,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
     if (useLocal)
       std::tie(result, loader) = ReadInfoTag(*pItem, info2, bDirNames, true);
 
-    if (result == InfoType::FULL)
+    if (result == InfoType::FULL && idTvShow < 0)
     {
 
       long lResult = AddVideo(pItem, info2, bDirNames, useLocal);
@@ -874,7 +883,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         return InfoRet::INFO_ERROR;
       if (fetchEpisodes)
       {
-        InfoRet ret = RetrieveInfoForEpisodes(pItem, lResult, info2, useLocal, pDlgProgress);
+        InfoRet ret = RetrieveInfoForEpisodes(pItem, lResult, files, info2, useLocal, pDlgProgress);
         if (ret == InfoRet::ADDED)
           m_database.SetPathHash(pItem->GetPath(), pItem->GetProperty("hash").asString());
         return ret;
@@ -885,6 +894,15 @@ CVideoInfoScanner::~CVideoInfoScanner()
     {
       scrUrl = loader->ScraperUrl();
       pURL = &scrUrl;
+    }
+
+    // Process episodes added later after nfo is scanned in case there is an episode group and parsing url
+    if (idTvShow > -1 && (!isSeason || idSeason > -1) && (fetchEpisodes || !pItem->IsFolder()))
+    {
+      InfoRet ret = RetrieveInfoForEpisodes(pItem, idTvShow, files, info2, useLocal, pDlgProgress);
+      if (ret == InfoRet::ADDED)
+        m_database.SetPathHash(strPath, pItem->GetProperty("hash").asString());
+      return ret;
     }
 
     CScraperUrl url;
@@ -915,7 +933,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         if (fetchEpisodes)
         {
           InfoRet ret =
-              RetrieveInfoForEpisodes(pItem, lResult, info2, useLocal, pDlgProgress, true);
+              RetrieveInfoForEpisodes(pItem, lResult, files, info2, useLocal, pDlgProgress, true);
           if (ret == InfoRet::ADDED)
           {
             m_database.SetPathHash(pItem->GetPath(), pItem->GetProperty("hash").asString());
@@ -944,7 +962,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
     }
     if (fetchEpisodes)
     {
-      InfoRet ret = RetrieveInfoForEpisodes(pItem, lResult, info2, useLocal, pDlgProgress, true);
+      InfoRet ret =
+          RetrieveInfoForEpisodes(pItem, lResult, files, info2, useLocal, pDlgProgress, true);
       if (ret == InfoRet::ADDED)
         m_database.SetPathHash(pItem->GetPath(), pItem->GetProperty("hash").asString());
     }
@@ -1211,18 +1230,12 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
   CInfoScanner::InfoRet CVideoInfoScanner::RetrieveInfoForEpisodes(CFileItem* item,
                                                                    long showID,
+                                                                   EPISODELIST& files,
                                                                    const ADDON::ScraperPtr& scraper,
                                                                    bool useLocal,
                                                                    CGUIDialogProgress* progress,
                                                                    bool alreadyHasArt /* = false */)
   {
-    // enumerate episodes
-    EPISODELIST files;
-    if (!EnumerateSeriesFolder(item, files))
-      return InfoRet::HAVE_ALREADY;
-    if (files.empty()) // no update or no files
-      return InfoRet::NOT_NEEDED;
-
     if (m_bStop || (progress && progress->IsCanceled()))
       return InfoRet::CANCELLED;
 
@@ -1323,7 +1336,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         {
           // force sorting consistency to avoid hash mismatch between platforms
           // sort by filename as always present for any files, but keep case sensitivity
-          items.Sort(SortByFile, SortOrderAscending, SortAttributeNone);
+          items.Sort(SortBy::FILE, SortOrder::ASCENDING, SortAttributeNone);
           GetPathHash(items, hash);
           if (StringUtils::EqualsNoCase(dbHash, hash))
           {
@@ -1374,7 +1387,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
     */
 
     // since we're doing this now anyway, should other items be stacked?
-    items.Sort(SortByPath, SortOrderAscending);
+    items.Sort(SortBy::PATH, SortOrder::ASCENDING);
 
     // If found VIDEO_TS.IFO or INDEX.BDMV then we are dealing with Blu-ray or DVD files on disc
     // somewhere in the directory tree. Assume that all other files/folders in the same folder
@@ -1924,7 +1937,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
 
       // Deal with 'Disc n' subdirectories
       // Unless dealing with a full nfo in which case details are taken from there already
-      if (!pItem->GetProperty("from_nfo").asBoolean(false))
+      if (!pItem->GetProperty("from_nfo").asBoolean(false) && !pItem->IsStack())
       {
         const std::string discNum{CUtil::GetPartNumberFromPath(movieDetails.m_strFileNameAndPath)};
         if (!discNum.empty())
@@ -1947,8 +1960,9 @@ CVideoInfoScanner::~CVideoInfoScanner()
           }
 
           // Add '(Disc n)' to title (in local language)
-          movieDetails.m_strTitle =
-              StringUtils::Format(g_localizeStrings.Get(29995), movieDetails.m_strTitle, discNum);
+          movieDetails.m_strTitle = StringUtils::Format(
+              CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(29995),
+              movieDetails.m_strTitle, discNum);
         }
       }
 
@@ -2180,7 +2194,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
           std::string filename = ART::GetLocalArtBaseFilename(*pItem, useFolder);
           std::string directory = URIUtils::GetDirectory(filename);
           if (filename != directory)
-            AddLocalItemArtwork(art, artTypes, filename, addAll, exactName);
+            AddLocalItemArtwork(art, artTypes, filename, addAll, exactName, bApplyToDir);
         }
 
         // Reset useFolder to false as GetLocalArtBaseFilename may modify it in
@@ -2204,7 +2218,7 @@ CVideoInfoScanner::~CVideoInfoScanner()
         }
         else
           path = ART::GetLocalArtBaseFilename(*pItem, useFolder);
-        AddLocalItemArtwork(art, artTypes, path, addAll, exactName);
+        AddLocalItemArtwork(art, artTypes, path, addAll, exactName, bApplyToDir);
       }
 
       if (moviePartOfSet)
@@ -2213,7 +2227,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
         if (!movieSetInfoPath.empty())
         {
           KODI::ART::Artwork movieSetArt;
-          AddLocalItemArtwork(movieSetArt, movieSetArtTypes, movieSetInfoPath, addAll, exactName);
+          AddLocalItemArtwork(movieSetArt, movieSetArtTypes, movieSetInfoPath, addAll, exactName,
+                              true);
           for (const auto& artItem : movieSetArt)
           {
             art["set." + artItem.first] = artItem.second;
@@ -2333,10 +2348,14 @@ CVideoInfoScanner::~CVideoInfoScanner()
       if (pDlgProgress)
       {
         pDlgProgress->SetLine(1, CVariant{20361}); // Loading episode details
-        pDlgProgress->SetLine(2, StringUtils::Format("{} {}", g_localizeStrings.Get(20373),
-                                                     file->iSeason)); // Season x
-        pDlgProgress->SetLine(3, StringUtils::Format("{} {}", g_localizeStrings.Get(20359),
-                                                     file->iEpisode)); // Episode y
+        pDlgProgress->SetLine(
+            2, StringUtils::Format(
+                   "{} {}", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(20373),
+                   file->iSeason)); // Season x
+        pDlgProgress->SetLine(
+            3, StringUtils::Format(
+                   "{} {}", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(20359),
+                   file->iEpisode)); // Episode y
         pDlgProgress->SetPercentage((int)((float)(iCurr++)/iMax*100));
         pDlgProgress->Progress();
       }
@@ -2349,7 +2368,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
       if (m_database.GetEpisodeId(file->strPath, file->iEpisode, file->iSeason) > -1)
       {
         if (m_handle)
-          m_handle->SetText(g_localizeStrings.Get(20415));
+          m_handle->SetText(
+              CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(20415));
         continue;
       }
 
@@ -2766,9 +2786,8 @@ CVideoInfoScanner::~CVideoInfoScanner()
         else
           basePath = StringUtils::Format("season{:02}", season);
 
-        AddLocalItemArtwork(art, artTypes,
-          URIUtils::AddFileToFolder(show.m_strPath, basePath),
-          addAll, exactName);
+        AddLocalItemArtwork(art, artTypes, URIUtils::AddFileToFolder(show.m_strPath, basePath),
+                            addAll, exactName, false);
 
         seasonArt[season] = art;
       }

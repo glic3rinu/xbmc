@@ -27,6 +27,7 @@
 #include "utils/FileExtensionProvider.h"
 #include "utils/Random.h"
 #include "utils/RegExp.h"
+#include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
 #include "video/VideoFileItemClassify.h"
@@ -105,8 +106,8 @@ void CFileItemList::Clear()
   std::unique_lock lock(m_lock);
 
   ClearItems();
-  m_sortDescription.sortBy = SortByNone;
-  m_sortDescription.sortOrder = SortOrderNone;
+  m_sortDescription.sortBy = SortBy::NONE;
+  m_sortDescription.sortOrder = SortOrder::NONE;
   m_sortDescription.sortAttributes = SortAttributeNone;
   m_sortIgnoreFolders = false;
   m_cacheToDisc = CacheType::IF_SLOW;
@@ -333,7 +334,7 @@ void CFileItemList::Sort(SortBy sortBy,
                          SortOrder sortOrder,
                          SortAttribute sortAttributes /* = SortAttributeNone */)
 {
-  if (sortBy == SortByNone ||
+  if (sortBy == SortBy::NONE ||
       (m_sortDescription.sortBy == sortBy && m_sortDescription.sortOrder == sortOrder &&
        m_sortDescription.sortAttributes == sortAttributes))
     return;
@@ -349,7 +350,7 @@ void CFileItemList::Sort(SortBy sortBy,
 
 void CFileItemList::Sort(SortDescription sortDescription)
 {
-  if (sortDescription.sortBy == SortByNone ||
+  if (sortDescription.sortBy == SortBy::NONE ||
       (m_sortDescription.sortBy == sortDescription.sortBy &&
        m_sortDescription.sortOrder == sortDescription.sortOrder &&
        m_sortDescription.sortAttributes == sortDescription.sortAttributes))
@@ -360,12 +361,14 @@ void CFileItemList::Sort(SortDescription sortDescription)
     sortDescription.sortAttributes =
         static_cast<SortAttribute>(sortDescription.sortAttributes & ~SortAttributeIgnoreFolders);
   }
-  else if ((sortDescription.sortBy == SortByFile || sortDescription.sortBy == SortBySortTitle ||
-            sortDescription.sortBy == SortByOriginalTitle ||
-            sortDescription.sortBy == SortByDateAdded || sortDescription.sortBy == SortByRating ||
-            sortDescription.sortBy == SortByYear || sortDescription.sortBy == SortByPlaylistOrder ||
-            sortDescription.sortBy == SortByLastPlayed ||
-            sortDescription.sortBy == SortByPlaycount) ||
+  else if ((sortDescription.sortBy == SortBy::FILE ||
+            sortDescription.sortBy == SortBy::SORT_TITLE ||
+            sortDescription.sortBy == SortBy::ORIGINAL_TITLE ||
+            sortDescription.sortBy == SortBy::DATE_ADDED ||
+            sortDescription.sortBy == SortBy::RATING || sortDescription.sortBy == SortBy::YEAR ||
+            sortDescription.sortBy == SortBy::PLAYLIST_ORDER ||
+            sortDescription.sortBy == SortBy::LAST_PLAYED ||
+            sortDescription.sortBy == SortBy::PLAYCOUNT) ||
            m_sortIgnoreFolders)
   {
     sortDescription.sortAttributes =
@@ -697,7 +700,7 @@ void CFileItemList::Stack()
   SetProperty("isstacked", true);
 
   // items needs to be sorted for stuff below to work properly
-  Sort(SortByLabel, SortOrderAscending);
+  Sort(SortBy::LABEL, SortOrder::ASCENDING);
 
   // Convert folder paths containing disc images to files (INDEX.BDMV or VIDEO_TS.IFO)
   ConvertDiscFoldersToFiles(m_items);
@@ -873,8 +876,8 @@ bool CFileItemList::Load(int windowID)
       CArchive ar(&file, CArchive::load);
       ar >> *this;
       CLog::Log(LOGDEBUG, "Loading items: {}, directory: {} sort method: {}, ascending: {}", Size(),
-                CURL::GetRedacted(GetPath()), m_sortDescription.sortBy,
-                m_sortDescription.sortOrder == SortOrderAscending ? "true" : "false");
+                CURL::GetRedacted(GetPath()), static_cast<int>(m_sortDescription.sortBy),
+                m_sortDescription.sortOrder == SortOrder::ASCENDING ? "true" : "false");
       ar.Close();
       file.Close();
       return true;
@@ -911,8 +914,8 @@ bool CFileItemList::Save(int windowID)
     CArchive ar(&file, CArchive::store);
     ar << *this;
     CLog::Log(LOGDEBUG, "  -- items: {}, sort method: {}, ascending: {}", iSize,
-              m_sortDescription.sortBy,
-              m_sortDescription.sortOrder == SortOrderAscending ? "true" : "false");
+              static_cast<int>(m_sortDescription.sortBy),
+              m_sortDescription.sortOrder == SortOrder::ASCENDING ? "true" : "false");
     ar.Close();
     file.Close();
     return true;
@@ -1037,7 +1040,7 @@ void CFileItemList::SetReplaceListing(bool replace)
 
 void CFileItemList::ClearSortState()
 {
-  m_sortDescription.sortBy = SortByNone;
-  m_sortDescription.sortOrder = SortOrderNone;
+  m_sortDescription.sortBy = SortBy::NONE;
+  m_sortDescription.sortOrder = SortOrder::NONE;
   m_sortDescription.sortAttributes = SortAttributeNone;
 }

@@ -15,7 +15,9 @@
 #include "games/GameServices.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIListItem.h"
-#include "guilib/LocalizeStrings.h"
+#include "guilib/GUIUtils.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "utils/StringUtils.h"
 #include "utils/log.h"
 
@@ -243,14 +245,7 @@ bool CGUIInfoLabel::ReplaceSpecialKeywordReferences(std::string& work,
 
 std::string LocalizeReplacer(const std::string& str)
 {
-  const uint32_t id = std::atoi(str.c_str());
-  auto skin = CServiceBroker::GetGUI()->GetSkinInfo();
-  if (skin && ADDON::IsSkinStringId(id))
-  {
-    return g_localizeStrings.GetAddonString(skin->ID(), id);
-  }
-
-  return g_localizeStrings.Get(id);
+  return CGUIUtils::GetLocalizedString(std::atoi(str.c_str()));
 }
 
 std::string AddonReplacer(const std::string& str)
@@ -259,7 +254,8 @@ std::string AddonReplacer(const std::string& str)
   size_t length = str.find(' ');
   const std::string addonid = str.substr(0, length);
   const int stringid{std::stoi(str.substr(length + 1))};
-  return g_localizeStrings.GetAddonString(addonid, stringid);
+  return CServiceBroker::GetResourcesComponent().GetLocalizeStrings().GetAddonString(addonid,
+                                                                                     stringid);
 }
 
 std::string ControllerFeatureReplacer(const std::string& str)
