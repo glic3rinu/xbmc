@@ -56,6 +56,7 @@ struct SPlayerState
     cache_bytes = 0;
     cache_level = 0.0;
     cache_offset = 0.0;
+    cache_time = 0.0;
     lastSeek = 0;
     streamsReady = false;
   }
@@ -75,8 +76,9 @@ struct SPlayerState
   MenuType menuType;
   bool streamsReady;
 
-  int chapter;              // current chapter
-  std::vector<std::pair<std::string, int64_t>> chapters; // name and position for chapters
+  int chapter; // 1-based current chapter. <=0 means no chapter / unknown
+  // name and start timestamp of chapters.
+  std::vector<std::pair<std::string, std::chrono::milliseconds>> chapters;
 
   bool canpause;            // pvr: can pause the current playing item
   bool canseek;             // pvr: can seek in the current playing item
@@ -200,6 +202,7 @@ struct SelectionStream
   std::string stereo_mode;
   float aspect_ratio = 0.0f;
   StreamHdrType hdrType = StreamHdrType::HDR_TYPE_NONE;
+  AVDOVIDecoderConfigurationRecord dovi{};
   uint32_t fpsScale{0};
   uint32_t fpsRate{0};
 };
@@ -492,6 +495,8 @@ protected:
   int64_t GetUpdatedTime();
   int64_t GetTime();
   float GetPercentage();
+
+  virtual bool CanTempo();
 
   virtual void UpdateContent();
   void UpdateContentState();

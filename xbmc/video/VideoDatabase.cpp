@@ -3150,12 +3150,13 @@ bool CVideoDatabase::SetStreamDetailsForFileId(const CStreamDetails& details, in
       m_pDS->exec(PrepareSQL(
           "INSERT INTO streamdetails "
           "(idFile, iStreamType, strVideoCodec, fVideoAspect, iVideoWidth, iVideoHeight, "
-          "iVideoDuration, strStereoMode, strVideoLanguage, strHdrType) "
-          "VALUES (%i,%i,'%s',%f,%i,%i,%i,'%s','%s','%s')",
+          "iVideoDuration, strStereoMode, strVideoLanguage, strHdrType, strHdrDetail) "
+          "VALUES (%i,%i,'%s',%f,%i,%i,%i,'%s','%s','%s','%s')",
           idFile, static_cast<int>(CStreamDetail::VIDEO), details.GetVideoCodec(i).c_str(),
           static_cast<double>(details.GetVideoAspect(i)), details.GetVideoWidth(i),
           details.GetVideoHeight(i), details.GetVideoDuration(i), details.GetStereoMode(i).c_str(),
-          details.GetVideoLanguage(i).c_str(), details.GetVideoHdrType(i).c_str()));
+          details.GetVideoLanguage(i).c_str(), details.GetVideoHdrType(i).c_str(),
+          details.GetVideoHdrDetail(i).c_str()));
     }
     for (int i=1; i<=details.GetAudioStreamCount(); i++)
     {
@@ -4416,6 +4417,7 @@ bool CVideoDatabase::GetStreamDetails(CVideoInfoTag& tag)
           p->m_strStereoMode = pDS->fv(11).get_asString();
           p->m_strLanguage = pDS->fv(12).get_asString();
           p->m_strHdrType = pDS->fv(13).get_asString();
+          p->m_strHdrDetail = pDS->fv(14).get_asString();
           details.AddStream(p);
           retVal = true;
           break;
@@ -6240,7 +6242,7 @@ void CVideoDatabase::UpdateMovieTitle(int idMovie,
 
     if (!content.empty())
     {
-      SetSingleValue(iType, idMovie, FieldTitle, strNewMovieTitle);
+      SetSingleValue(iType, idMovie, Field::TITLE, strNewMovieTitle);
       AnnounceUpdate(content, idMovie);
     }
   }
@@ -6265,7 +6267,7 @@ bool CVideoDatabase::UpdateVideoSortTitle(int idDb,
     if (iType == VideoDbContentType::TVSHOWS)
       content = MediaTypeTvShow;
 
-    if (SetSingleValue(iType, idDb, FieldSortTitle, strNewSortTitle))
+    if (SetSingleValue(iType, idDb, Field::SORT_TITLE, strNewSortTitle))
     {
       AnnounceUpdate(content, idDb);
       return true;
@@ -7777,7 +7779,7 @@ bool CVideoDatabase::GetMoviesByWhere(const std::string& strBaseDir, const Filte
     const query_data &data = m_pDS->get_result_set().records;
     for (const auto &i : results)
     {
-      const auto targetRow = static_cast<unsigned int>(i.at(FieldRow).asInteger());
+      const auto targetRow = static_cast<unsigned int>(i.at(Field::ROW).asInteger());
       const dbiplus::sql_record* const record = data.at(targetRow);
 
       CVideoInfoTag movie = GetDetailsForMovie(record, getDetails);
@@ -7922,7 +7924,7 @@ bool CVideoDatabase::GetTvShowsByWhere(const std::string& strBaseDir, const Filt
     const query_data &data = m_pDS->get_result_set().records;
     for (const auto &i : results)
     {
-      const auto targetRow = static_cast<unsigned int>(i.at(FieldRow).asInteger());
+      const auto targetRow = static_cast<unsigned int>(i.at(Field::ROW).asInteger());
       const dbiplus::sql_record* const record = data.at(targetRow);
 
       auto pItem = std::make_shared<CFileItem>();
@@ -8053,7 +8055,7 @@ bool CVideoDatabase::GetEpisodesByWhere(const std::string& strBaseDir, const Fil
     const query_data &data = m_pDS->get_result_set().records;
     for (const auto &i : results)
     {
-      const auto targetRow = static_cast<unsigned int>(i.at(FieldRow).asInteger());
+      const auto targetRow = static_cast<unsigned int>(i.at(Field::ROW).asInteger());
       const dbiplus::sql_record* const record = data.at(targetRow);
 
       CVideoInfoTag episode = GetDetailsForEpisode(record, getDetails);
@@ -9034,7 +9036,7 @@ bool CVideoDatabase::GetMusicVideosByWhere(const std::string &baseDir, const Fil
     const query_data &data = m_pDS->get_result_set().records;
     for (const auto &i : results)
     {
-      const auto targetRow = static_cast<unsigned int>(i.at(FieldRow).asInteger());
+      const auto targetRow = static_cast<unsigned int>(i.at(Field::ROW).asInteger());
       const dbiplus::sql_record* const record = data.at(targetRow);
 
       CVideoInfoTag musicvideo = GetDetailsForMusicVideo(record, getDetails);
